@@ -100,10 +100,12 @@ class ContactResource(Resource):
         return contact.data, HTTPStatus.OK
 
     @jwt_required()
-    def delete(self):
+    def delete(self, contact_id):
         current_user_id = get_jwt_identity()
-        user = User.get_by_id(id=current_user_id)
-        user.status = False
+        contact = Contact.get_by_contact_id(contact_id)
+        if current_user_id != contact.user_id:
+            return {"message": "UNAUTHORIZED ACCESS"}, HTTPStatus.UNAUTHORIZED
+        contact.status = False
         db.session.commit()
         return "", HTTPStatus.NO_CONTENT
 
