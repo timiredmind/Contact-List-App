@@ -3,40 +3,35 @@ from flask_restful import Resource
 from flask import request
 from models.user import User
 from http import HTTPStatus
-from flask_expects_json import expects_json
-from schemas import create_user_schema, login_schema, patch_schema
-from utils import generate_hash,verify_password
+from marshmallow import ValidationError
+from schemas import create_user_schema, patch_schema
+from utils import generate_hash, verify_password
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from models.token_blocklist import TokenBlockList
+from schema.user import UserSchema
 
 
 class CreateUserResource(Resource):
-    @expects_json(create_user_schema)
     def post(self):
-        data = request.get_json()
-        username = data.get("username")
-        email = data.get("email")
-        phone_number = data.get("phone_number")
-        password = data.get("password")
+        json_data = request.get_json()
+        try:
+            data = UserSchema().load(json_data)
+        except ValidationError as error:
+            return {
+                "message": "Validation Error",
+                "errors": error.messages
+            }, HTTPStatus.CREATED
 
-        if User.get_by_username(username):
+        if User.get_by_username(data["username"]):
             return {"message": "username already exists"}, HTTPStatus.BAD_REQUEST
 
-        if User.get_by_email(email):
+        if User.get_by_email(data["email"]):
             return {"message": "email address already registered to a different user"}, HTTPStatus.BAD_REQUEST
 
-        if User.get_by_phone_number(phone_number):
+        if User.get_by_phone_number(data["phone_number"]):
             return {"message": "phone number already registered to a different user"}, HTTPStatus.BAD_REQUEST
-        password_hash = generate_hash(password)
-        try:
-            user = User(username=username,
-                        email=email,
-                        phone_number=phone_number,
-                        password=password_hash
-                        )
 
-        except Exception as err:
-            return {"message": err}, HTTPStatus.BAD_REQUEST
+        user = User(**data)
 
         db.session.add(user)
         db.session.commit()
@@ -45,9 +40,16 @@ class CreateUserResource(Resource):
 
 
 class LoginResource(Resource):
-    @expects_json(login_schema)
     def post(self):
         json_data = request.get_json()
+        try:
+            UserSchema(exclude=("email", "phone_number",)).load(json_data)
+        except ValidationError as err:
+            return {
+                "message": "Validation Error",
+                "error": err.messages
+            }, HTTPStatus.BAD_REQUEST
+
         username = json_data.get("username")
         password = json_data.get("password")
         user = User.get_by_username(username)
@@ -63,18 +65,25 @@ class UserResource(Resource):
     @jwt_required()
     def get(self):
         current_user_id = get_jwt_identity()
-        user = User.get_by_id(current_user_id)
-        return user.data, HTTPStatus.OK
+        user = User.get_by_id(id=current_user_id)
+        return UserSchema(exclude=("id",)).dump(user), HTTPStatus.OK
 
     @jwt_required()
-    @expects_json(patch_schema)
-    def put(self):
+    def patch(self):
         json_data = request.get_json()
+        try:
+            data = UserSchema(partial=True).load(json_data)
+        except ValidationError as err:
+            return {
+                "message": "Validation Error",
+                "error": err.messages
+            }
+
         user_id = get_jwt_identity()
         user = User.query.filter_by(id=user_id).first()
-        username = json_data.get("username")
-        email = json_data.get("email")
-        phone_number = json_data.get("phone_number")
+        username = json_data.get("username") or user.username
+        email = json_data.get("email") or user.email
+        phone_number = json_data.get("phone_number") or user.phone_number
         if user.username == username is False and User.get_by_username(username):
             return {"message": "username already registered to a different user"}, HTTPStatus.BAD_REQUEST
         if user.email == email is False and User.get_by_email(email):
@@ -87,7 +96,7 @@ class UserResource(Resource):
         user.phone_number = phone_number
         db.session.commit()
 
-        return user.data, HTTPStatus.OK
+        return UserSchema(exclude=("id", )).dump(user), HTTPStatus.OK
 
     @jwt_required()
     def delete(self):
