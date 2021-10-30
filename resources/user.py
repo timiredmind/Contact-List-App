@@ -4,8 +4,7 @@ from flask import request
 from models.user import User
 from http import HTTPStatus
 from marshmallow import ValidationError
-from schemas import create_user_schema, patch_schema
-from utils import generate_hash, verify_password
+from utils import verify_password
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from models.token_blocklist import TokenBlockList
 from schema.user import UserSchema
@@ -56,7 +55,7 @@ class LoginResource(Resource):
         if (not user) or (not user.status):
             return {"error": "User not found"}, HTTPStatus.NOT_FOUND
         if not verify_password(password, user.password):
-            return {"error": "Incorrect password and username"}, HTTPStatus.BAD_REQUEST
+            return {"error": "Incorrect password or username"}, HTTPStatus.BAD_REQUEST
         access_token = create_access_token(identity=user.id)
         return {"access_token": access_token}, HTTPStatus.OK
 
@@ -72,7 +71,7 @@ class UserResource(Resource):
     def patch(self):
         json_data = request.get_json()
         try:
-            data = UserSchema(partial=True).load(json_data)
+            data = UserSchema(partial=True, exclude=("password", )).load(json_data)
         except ValidationError as err:
             return {
                 "message": "Validation Error",
@@ -81,9 +80,9 @@ class UserResource(Resource):
 
         user_id = get_jwt_identity()
         user = User.query.filter_by(id=user_id).first()
-        username = json_data.get("username") or user.username
-        email = json_data.get("email") or user.email
-        phone_number = json_data.get("phone_number") or user.phone_number
+        username = data.get("username") or user.username
+        email = data.get("email") or user.email
+        phone_number = data.get("phone_number") or user.phone_number
         if user.username == username is False and User.get_by_username(username):
             return {"message": "username already registered to a different user"}, HTTPStatus.BAD_REQUEST
         if user.email == email is False and User.get_by_email(email):
@@ -120,11 +119,3 @@ class UserLogOutResource(Resource):
         db.session.commit()
 
         return "", HTTPStatus.NO_CONTENT
-
-
-
-
-
-
-
-

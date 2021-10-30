@@ -13,14 +13,6 @@ class User(db.Model):
     status = db.Column(db.Boolean, default=True)
     contacts = db.relationship("Contact", backref="user", lazy=True)
 
-    @property
-    def data(self):
-        return {
-            "username": self.username,
-            "email": self.email,
-            "phone_number": self.phone_number
-        }
-
     @classmethod
     def get_by_username(cls, username):
         return cls.query.filter_by(username=username).first()
