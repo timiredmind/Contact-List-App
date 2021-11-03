@@ -1,5 +1,6 @@
-from marshmallow import Schema, fields, post_dump
+from marshmallow import Schema, fields
 from utils import validate_phone_number
+from schema.pagination import PaginationSchema
 
 
 class ContactSchema(Schema):
@@ -14,12 +15,8 @@ class ContactSchema(Schema):
     image_url = fields.Str()
     date_created = fields.DateTime(dump_only=True)
 
-    @post_dump(pass_many=True)
-    def wrap(self, data, many):
-        if many:
-            return {"contacts": data}
 
-        return {"contact": data}
-
+class ContactPaginationSchema(PaginationSchema):
+    contacts = fields.Nested(ContactSchema, attribute="items", many=True)
 
 

@@ -1,5 +1,5 @@
 from extension import db
-
+from sqlalchemy import asc, desc
 
 class Contact(db.Model):
     __tablename__ = "contacts"
@@ -14,18 +14,15 @@ class Contact(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     status = db.Column(db.Boolean, default=True)
 
-    @property
-    def data(self):
-        return {
-            "id": self.id,
-            "name": self.name,
-            "email": self.email,
-            "phone_number": self.phone_number,
-            "address": self.address,
-            "image_url": self.image_url
-        }
+
 
     @classmethod
     def get_by_contact_id(cls, contact_id):
         return cls.query.filter_by(id=contact_id).first()
+
+    @classmethod
+    def get_all_by_user(cls, user_id, page, per_page):
+        return cls.query.filter_by(user_id=user_id, status=True)\
+            .order_by(asc(cls.date_created)).paginate(page=page, per_page=per_page)# Returns a paginated object
+
 

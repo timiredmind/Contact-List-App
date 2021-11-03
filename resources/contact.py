@@ -5,17 +5,21 @@ from models.user import User
 from flask import request
 from extension import db
 from http import HTTPStatus
-from schema.contact import ContactSchema
+from schema.contact import ContactSchema, ContactPaginationSchema
 from marshmallow import ValidationError
+from webargs.flaskparser import use_kwargs
+from webargs import fields
 
 
 class ContactListResource(Resource):
+    @use_kwargs({
+        "page": fields.Int(missing=1),
+        "per_page": fields.Int(missing=2)}, location="querystring")
     @jwt_required()
-    def get(self):
+    def get(self, page, per_page):
         current_user_id = get_jwt_identity()
-        data = Contact.query.filter_by(user_id=current_user_id).all()
-        contacts = [contact for contact in data if contact.status]
-        return ContactSchema(many=True, only=("id", "name", "phone_number")).dump(contacts), HTTPStatus.OK
+        contacts = Contact.get_all_by_user(current_user_id, page, per_page)
+        return ContactPaginationSchema().dump(contacts), HTTPStatus.OK
 
     @jwt_required()
     def post(self):
@@ -92,7 +96,7 @@ class ContactResource(Resource):
         contact.email = data.get("email") or contact.email
         contact.phone_number = data.get("phone_number") or contact.phone_number
         contact.address = data.get("address") or contact.address
-        contact.image_url = data.get("image_url") or contact.address
+        contact.image_url = data.get("image_url") or contact.image_url
 
         db.session.commit()
         return ContactSchema().dump(contact), HTTPStatus.OK
@@ -106,3 +110,5 @@ class ContactResource(Resource):
         contact.status = False
         db.session.commit()
         return "", HTTPStatus.NO_CONTENT
+
+
