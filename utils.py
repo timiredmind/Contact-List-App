@@ -3,6 +3,7 @@ from marshmallow import ValidationError
 import re
 from urllib.parse import urlencode
 from flask import request
+from extension import cache
 
 
 def generate_hash(password):
@@ -24,4 +25,9 @@ def generate_url(page, per_page):
     query_args["page"] = page
     query_args["per_page"] = per_page
     return f"{request.base_url}?{urlencode(query_args)}"
+
+
+def clear_cache(key_prefix):
+    key_list = [key for key in cache.cache._cache().keys if key.startswith(key_prefix)]
+    cache.delete_many(*key_list)
 

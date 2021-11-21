@@ -3,22 +3,32 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from models.contact import Contact
 from models.user import User
 from flask import request
-from extension import db
+from extension import db, cache, limiter
 from http import HTTPStatus
 from schema.contact import ContactSchema, ContactPaginationSchema
 from marshmallow import ValidationError
 from webargs.flaskparser import use_kwargs
 from webargs import fields
+from utils import clear_cache
 
 
 class ContactListResource(Resource):
+    decorators = [limiter.limit("3/minute", methods=["GET"])]
+
     @use_kwargs({
+        "search": fields.Str(missing=""),
         "page": fields.Int(missing=1),
-        "per_page": fields.Int(missing=2)}, location="querystring")
+        "per_page": fields.Int(missing=2),
+        "sort":fields.Str(missing="name"),
+        "order": fields.Str(missing="asc")},
+        location="querystring")
     @jwt_required()
-    def get(self, page, per_page):
+    @cache.cached(timeout=300, query_string=True)
+    def get(self, page, per_page, search, sort, order):
         current_user_id = get_jwt_identity()
-        contacts = Contact.get_all_by_user(current_user_id, page, per_page)
+        if sort not in ["name", "email", "phone_number"]:
+            sort = "name"
+        contacts = Contact.get_all_by_user(current_user_id, page, per_page, search, sort, order)
         return ContactPaginationSchema().dump(contacts), HTTPStatus.OK
 
     @jwt_required()
@@ -46,11 +56,13 @@ class ContactListResource(Resource):
 
         user.contacts.append(new_contact)
         db.session.commit()
+        clear_cache("/users/contacts")
         return ContactSchema().dump(new_contact), HTTPStatus.CREATED
 
 
 class ContactResource(Resource):
     @jwt_required()
+    @cache.cached(timeout=300)
     def get(self, contact_id):
         current_user_id = get_jwt_identity()
         contact = Contact.get_by_contact_id(contact_id)
@@ -99,6 +111,7 @@ class ContactResource(Resource):
         contact.image_url = data.get("image_url") or contact.image_url
 
         db.session.commit()
+        clear_cache("view//users/contacts")
         return ContactSchema().dump(contact), HTTPStatus.OK
 
     @jwt_required()
@@ -109,6 +122,7 @@ class ContactResource(Resource):
             return {"message": "UNAUTHORIZED ACCESS"}, HTTPStatus.UNAUTHORIZED
         contact.status = False
         db.session.commit()
+        clear_cache("view//users/contacts")
         return "", HTTPStatus.NO_CONTENT
 
 

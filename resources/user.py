@@ -1,10 +1,10 @@
-from extension import db
+from extension import db, cache
 from flask_restful import Resource
 from flask import request
 from models.user import User
 from http import HTTPStatus
 from marshmallow import ValidationError
-from utils import verify_password
+from utils import verify_password, clear_cache
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from models.token_blocklist import TokenBlockList
 from schema.user import UserSchema
@@ -19,7 +19,7 @@ class CreateUserResource(Resource):
             return {
                 "message": "Validation Error",
                 "errors": error.messages
-            }, HTTPStatus.CREATED
+            }, HTTPStatus.BAD_REQUEST
 
         if User.get_by_username(data["username"]):
             return {"message": "username already exists"}, HTTPStatus.BAD_REQUEST
@@ -62,6 +62,7 @@ class LoginResource(Resource):
 
 class UserResource(Resource):
     @jwt_required()
+    @cache.cached(timeout=300)
     def get(self):
         current_user_id = get_jwt_identity()
         user = User.get_by_id(id=current_user_id)
@@ -94,7 +95,7 @@ class UserResource(Resource):
         user.email = email
         user.phone_number = phone_number
         db.session.commit()
-
+        clear_cache("view//users/info")
         return UserSchema(exclude=("id", )).dump(user), HTTPStatus.OK
 
     @jwt_required()
@@ -105,7 +106,7 @@ class UserResource(Resource):
         jti = get_jwt()["jti"]
         db.session.add(TokenBlockList(jti=jti, user=user.username, description="User profile deleted"))
         db.session.commit()
-
+        clear_cache("user")
         return "", HTTPStatus.NO_CONTENT
 
 
